@@ -22,6 +22,27 @@ with open('nginx_logs.txt', 'w') as f:
 lognames = open("nginx_logs.txt", "r")
 lines = lognames.readlines()
 
+i = 0
 for line in lines:
     if "bigbluebutton" in line:
-        print(line)
+        is_gzip = False
+        ext = line.strip()[-3:]
+        if ext == '.gz':
+            is_gzip = True
+
+        if is_gzip:
+            cmd2 = conn.run('cd /var/log/nginx && zcat ' + line.strip())
+        
+            # save recordings list into a file
+            with open("nginx/bbb-" + str(i) + ".txt", "w") as f:
+                f.truncate(0) # need '0' when using r+
+                print(cmd2, file=f)
+        else:
+            cmd2 = conn.run('cd /var/log/nginx && cat ' + line.strip())
+        
+            # save recordings list into a file
+            with open("nginx/bbb-" + str(i) + ".txt", "w") as f:
+                f.truncate(0) # need '0' when using r+
+                print(cmd2, file=f)
+            
+        i+=1
