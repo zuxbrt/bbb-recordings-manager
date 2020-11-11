@@ -1,45 +1,43 @@
 import xlsxwriter
 import requests
 import lxml
+import time
+import json 
+
+from hashlib import sha1
 from bs4 import BeautifulSoup as Soup
 from configparser import ConfigParser
+from bigbluebutton_api_python import BigBlueButton
 
+# soup4 lib docs
 # https://pypi.org/project/beautifulsoup4/
 
+# bbb api docs
+# https://github.com/yunkaiwang/bigbluebutton-api-python
+
+# rawXml docs
+# https://jxmlease.readthedocs.io/en/stable/dict_objects.html
 
 # get config file
 config_object = ConfigParser()
 config_object.read('config.ini')
 
-# get ssh connection params
+# config
 config = config_object["CONFIG"]
 
-# check if there are recordings for meeting
-def has_recordings(meeting_id):
-    url = config['bbb_api'] + "/getRecordings?meetingID=" + meeting_id + "&checksum=" + config['api_checksum']
-    # if the server sent a Gzip or Deflate compressed response, decompress
-    # as we read the raw stream:
-    response = requests.get(url)
-    string_xml = response.content
-    soup = Soup(string_xml,'lxml')
-    #extracting data between request_id Tag
-    state = soup.response.returncode.get_text()
-    if state == 'SUCCESS':
-        has_rec = soup.response.messagekey.get_text()
-        if has_rec != 'noRecordings':
-            return soup.find('url');
-    return 'no url';
+# bbb instance
+b = BigBlueButton(config['bbb_api'], config['secret'])
 
-
+# setup xlsx doc
 workbook = xlsxwriter.Workbook('bbb-recordings.xlsx')
 worksheet = workbook.add_worksheet()
 
+# open recordings list
 file = open("recordings.txt", "r")
 lines = file.readlines()
 
 recording_ids = []
 worksheet_data = []
-
 
 count = 0
 # Strips the newline character 
@@ -62,19 +60,33 @@ col = 0
 
 header = False
 for item in worksheet_data:
+    # set doc header
     if header == False:
-        worksheet.write(row, col, "Internal ID")
-        worksheet.write(row, col + 1, "External ID")
-        worksheet.write(row, col + 2, "Date")
-        worksheet.write(row, col + 2, "URL")
+        worksheet.write(row, col, "Ime predavanja")
+        worksheet.write(row, col + 1, "Link")
         header = True
     else:
-        rec_url = has_recordings(item["internal_id"])
-        worksheet.write(row, col, item["internal_id"])
-        worksheet.write(row, col + 1, item["external_id"])
-        worksheet.write(row, col + 2, item["date"])
-        worksheet.write(row, col + 2, rec_url)
-    row += 1
+        try:
+            # get bbb meeting recording
+            res = b.get_recordings(item["external_id"]);
+            xml = res.rawXml
+            meetingName = ""
+            url = ""
+            # get meeting name
+            for node in xml.find_nodes_with_tag('meetingName'):
+                meetingName = node
+
+            # get meeting playback url
+            for node2 in xml.find_nodes_with_tag('url'):
+                url = node2
+
+            # add to doc if name and url present
+            if meetingName != "" and url != "":  
+                worksheet.write(row, col, meetingName)
+                worksheet.write(row, col + 1, url)
+                row += 1
+        except TimeoutError as e: #
+            print(e)
 
 workbook.close()
     
